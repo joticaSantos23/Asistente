@@ -1,31 +1,40 @@
 <template>
   <div class="app-container">
-    <Transition name="fade">
-      <div v-if="mostrarNotificacion" class="notificacion-exito">
-        ✅ Producto añadido al pedido
+    <Transition name="slide-toast">
+      <div v-if="notificacion.visible" :class="['notificacion-toast', notificacion.tipo]">
+        {{ notificacion.mensaje }}
       </div>
     </Transition>
 
     <header class="main-header">
-      <h1>Asistente gourmet</h1>
+      <h1>✨ Restaurante Gourmet</h1>
+      <p class="subtitle">Panel de Control & Gestión de Inventario</p>
     </header>
 
-    <div class="layout">
+    <div class="layout-full">
       <section class="catalogo">
-        <div class="filter-bar">
-          <label>Filtrar Menú:</label>
-          <select v-model="categoriaSeleccionada" class="elegant-select">
-            <option value="Todos">Ver Todo el Menú</option>
-            <option v-for="cat in categorias" :key="cat" :value="cat">{{ cat }}</option>
-          </select>
+        <div class="toolbar">
+          <div class="filter-group">
+            <label> Categoría:</label>
+            <select v-model="categoriaSeleccionada" class="elegant-select">
+              <option value="Todos"> Mostrar Todo</option>
+              <option v-for="cat in categorias" :key="cat" :value="cat">{{ cat }}</option>
+            </select>
+          </div>
+          <button class="btn-add-product" @click="abrirModalNuevoPlato">
+            + Nuevo Producto
+          </button>
         </div>
 
         <div class="platos-grid">
-          <template v-for="plato in platos" :key="plato.id">
+          <template v-for="(plato, index) in platos" :key="plato.id">
             <div v-if="categoriaSeleccionada === 'Todos' || plato.categoria === categoriaSeleccionada" class="card">
               <div class="card-image">
                 <img :src="plato.imagen" :alt="plato.nombre" />
                 <span class="category-badge">{{ plato.categoria }}</span>
+                <button class="btn-delete-from-inventory" @click="eliminarDelInventario(plato.id)" title="Eliminar producto del menú">
+                  🗑️
+                </button>
               </div>
               <div class="card-body">
                 <h3>{{ plato.nombre }}</h3>
@@ -35,14 +44,10 @@
                   <div class="price-container">
                     <span class="price">${{ plato.precio.toLocaleString() }}</span>
                     <span :class="['stock-label', { 'agotado-text': plato.stock === 0 }]">
-                      Disponibles: {{ plato.stock }}
+                      Stock: {{ plato.stock }}
                     </span>
                   </div>
-                  <button 
-                    class="btn-add-large" 
-                    @click="agregar(plato)" 
-                    :disabled="plato.stock === 0"
-                  >
+                  <button class="btn-add-to-cart" @click="agregarAlPedido(plato)" :disabled="plato.stock === 0">
                     {{ plato.stock === 0 ? 'Agotado' : '＋ Agregar' }}
                   </button>
                 </div>
@@ -51,26 +56,34 @@
           </template>
         </div>
       </section>
+    </div>
 
-      <aside class="pedido-sidebar">
-        <div class="ticket">
+    <button class="btn-floating-cart" @click="carritoAbierto = true">
+      <span class="cart-icon">🛒</span>
+      <span v-if="pedido.length > 0" class="cart-badge-count">{{ obtenerCantidadTotal() }}</span>
+    </button>
+
+    <Transition name="fade">
+      <div v-if="carritoAbierto" class="modal-overlay" @click="carritoAbierto = false">
+        <div class="modal-content ticket-modal" @click.stop>
           <div class="ticket-header">
-            <h2>Tu Pedido</h2>
+            <h2>🧾 Resumen de Pedido</h2>
+            <button @click="carritoAbierto = false" class="btn-close-circle">✕</button>
           </div>
           
           <div v-if="pedido.length === 0" class="empty-cart">
-            <p>Selecciona productos del menú</p>
+            <p>Carrito vacío</p>
           </div>
 
           <div v-else class="ticket-items">
             <div v-for="(p, i) in pedido" :key="i" class="ticket-row">
               <div class="item-info">
                 <span class="item-name">{{ p.nombre }}</span>
-                <span class="item-sub">${{ (p.precio * p.cantidad).toLocaleString() }}</span>
+                <small>${{ p.precio.toLocaleString() }} c/u</small>
               </div>
               <div class="item-actions">
                 <span class="qty-badge">x{{ p.cantidad }}</span>
-                <button @click="eliminar(i, p)" class="btn-remove">❌</button>
+                <button @click="eliminarUno(i, p)" class="btn-remove-black">✕</button>
               </div>
             </div>
           </div>
@@ -80,13 +93,57 @@
               <span>Total:</span>
               <span class="total-price">${{ calcularTotal().toLocaleString() }}</span>
             </div>
-            <button class="btn-pdf-premium" @click="generarFactura" :disabled="pedido.length === 0">
-              <span class="icon">📄</span> FINALIZAR Y ABRIR FACTURA
+            <button class="btn-finalize" @click="procesarPago" :disabled="pedido.length === 0 || cargando">
+              <span v-if="cargando" class="spinner"></span>
+              <span v-else>💳 FINALIZAR Y ABRIR FACTURA</span>
             </button>
           </div>
         </div>
-      </aside>
-    </div>
+      </div>
+    </Transition>
+
+    <Transition name="fade">
+      <div v-if="mostrarModalNuevo" class="modal-overlay" @click="mostrarModalNuevo = false">
+        <div class="modal-content form-modal" @click.stop>
+          <div class="ticket-header">
+            <h2>🍱 Agregar Nuevo Plato</h2>
+            <button @click="mostrarModalNuevo = false" class="btn-close-circle">✕</button>
+          </div>
+          
+          <form @submit.prevent="guardarNuevoPlato" class="nuevo-plato-form">
+            <div class="form-group">
+              <label>Nombre del Plato:</label>
+              <input v-model="nuevoPlato.nombre" type="text" required placeholder="Ej: Pizza Hawaiana" />
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label>Categoría:</label>
+                <select v-model="nuevoPlato.categoria">
+                  <option v-for="cat in categorias" :key="cat" :value="cat">{{ cat }}</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Stock Inicial:</label>
+                <input v-model.number="nuevoPlato.stock" type="number" min="1" required />
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>Precio (COP):</label>
+              <input v-model.number="nuevoPlato.precio" type="number" min="0" required />
+            </div>
+
+            <div class="form-group">
+              <label>Imagen del Producto (.jpg):</label>
+              <input type="file" @change="manejarImagen" accept="image/jpeg, image/jpg" required />
+            </div>
+
+            <button type="submit" class="btn-save-product">💾 GUARDAR EN MENÚ</button>
+          </form>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -97,7 +154,10 @@ import jsPDF from "jspdf";
 const categorias = ["Comida Rápida", "Bebidas", "Postres", "Platos Fuertes"];
 const categoriaSeleccionada = ref("Todos");
 const pedido = ref([]);
-const mostrarNotificacion = ref(false);
+const carritoAbierto = ref(false);
+const mostrarModalNuevo = ref(false);
+const cargando = ref(false);
+const notificacion = ref({ visible: false, mensaje: "", tipo: "success" });
 
 const platos = ref([
   { id: 1, nombre: "Hamburguesa Premium", categoria: "Comida Rápida", precio: 15000, stock: 20, descripcion: "Carne angus con queso fundido.", ingredientes: "Pan brioche, carne.", imagen: "https://amebeef.com/wp-content/uploads/2024/03/american-beef-carne-para-hamburguesa-premium-beef-5.jpg" },
@@ -120,7 +180,7 @@ const platos = ref([
   { id: 19, nombre: "Peras al Vino Tinto", categoria: "Postres", precio: 25000, stock: 20, descripcion: "Peras pochadas con helado de jengibre.", ingredientes: "Peras, vino, jengibre.", imagen: "https://cdn.blog.paulinacocina.net/wp-content/uploads/2024/04/receta-de-peras-al-vino-tinto-Paulina-Cocina-Recetas-Cocina-1722430350.jpg" },
   { id: 20, nombre: "Affogato Imperial", categoria: "Postres", precio: 18000, stock: 20, descripcion: "Gelatto de avellana con espresso y Amaretto.", ingredientes: "Gelatto, caffé, licor.", imagen: "https://shop.raynvillesuperstore.co.uk/cdn/shop/files/affogato-imperial-stout-bourbon-barrel-aged-107-330ml-bottle-849243_1024x1024_2x_1_1200x1200.webp?v=1698239639" },
   { id: 21, nombre: "Limonada de Coco y Menta", categoria: "Bebidas", precio: 15000, stock: 20, descripcion: "Mezcla refrescante de coco y limones.", ingredientes: "Leche de coco, limón.", imagen: "https://www.recetasnestle.com.co/sites/default/files/srh_recipes/422ebc949f85f0119fe5ca3beff55a17.jpg" },
-  { id: 22, nombre: "Sangría de Frutos Amarillos", categoria: "Bebidas", precio: 45000, stock: 20, descripcion: "Vino blanco con mango y maracuyá.", ingredientes: "Vino blanco, frutas.", imagen: "https://laveranerasangriaoficial.com/cdn/shop/files/WhatsAppImage2024-01-06at1.58.03PM_1.jpg?v=1751949367" },
+  { id: 22, nombre: "Sangría de Frutos Rojos", categoria: "Bebidas", precio: 45000, stock: 20, descripcion: "Vino tinto con distintas frutas.", ingredientes: "Vino tinto, frutas.", imagen: "https://alimentossnob.com/wp-content/uploads/2020/10/sangriamedio-scaled.jpg" },
   { id: 23, nombre: "Gin Tonic de Pepino y Rosas", categoria: "Bebidas", precio: 38000, stock: 20, descripcion: "Ginebra premium con pétalos orgánicos.", ingredientes: "Gin, tónica, pepino.", imagen: "https://cuk-it.com/wp-content/uploads/2024/12/gin-tonic-pepino.webp" },
   { id: 24, nombre: "Vino Tinto Reserva (Copa)", categoria: "Bebidas", precio: 32000, stock: 20, descripcion: "Selección de la casa Malbec o Cabernet.", ingredientes: "Uva reserva.", imagen: "https://lacaretalicores.com/cdn/shop/files/VINO_CASTILLO_MOLINA.webp?v=1764554804&width=600" },
   { id: 25, nombre: "Infusión de Frutos Rojos", categoria: "Bebidas", precio: 12000, stock: 20, descripcion: "Mezcla de bayas y flores de hibisco.", ingredientes: "Bayas, hibisco.", imagen: "https://www.pompadour.es/modules/ph_simpleblog/featured/141.jpg" },
@@ -135,122 +195,210 @@ const platos = ref([
   { id: 34, nombre: "Bowl de Quinoa y Salmón", categoria: "Comida Rápida", precio: 45000, stock: 20, descripcion: "Opción saludable con aderezo de tahini.", ingredientes: "Quinoa, salmón.", imagen: "https://www.brillante.es/wp-content/uploads/2022/11/Buddha-bowl-de-salmon-ahumado-y-arroz-integral-con-quinoa.jpg" }
 ]);
 
-const agregar = (plato) => {
-  if (plato.stock > 0) {
-    const item = pedido.value.find((p) => p.id === plato.id);
-    if (item) {
-      item.cantidad++;
-    } else {
-      pedido.value.push({ ...plato, cantidad: 1 });
-    }
-    plato.stock--;
-    mostrarNotificacion.value = true;
-    setTimeout(() => { mostrarNotificacion.value = false; }, 2000);
+const nuevoPlato = ref({ nombre: "", categoria: "Comida Rápida", precio: 0, stock: 10, imagen: "" });
+
+const abrirModalNuevoPlato = () => {
+  nuevoPlato.value = { nombre: "", categoria: "Comida Rápida", precio: 0, stock: 10, imagen: "" };
+  mostrarModalNuevo.value = true;
+};
+
+const manejarImagen = (e) => {
+  const file = e.target.files[0];
+  if (file) {
+    const reader = new FileReader();
+    reader.onload = (f) => { nuevoPlato.value.imagen = f.target.result; };
+    reader.readAsDataURL(file);
   }
 };
 
-const eliminar = (idx, itemPedido) => {
-  const platoOriginal = platos.value.find(p => p.id === itemPedido.id);
-  if (platoOriginal) { platoOriginal.stock += itemPedido.cantidad; }
-  pedido.value.splice(idx, 1);
+const guardarNuevoPlato = () => {
+  const platoParaGuardar = { 
+    ...nuevoPlato.value, 
+    id: Date.now(), 
+    descripcion: "Producto agregado recientemente al sistema." 
+  };
+  platos.value.push(platoParaGuardar);
+  mostrarModalNuevo.value = false;
+  lanzarAviso("✅ Producto añadido al catálogo");
 };
 
-const calcularTotal = () => pedido.value.reduce((acc, p) => acc + (p.precio * p.cantidad), 0);
+// FUNCIÓN PARA BORRAR PRODUCTO POR COMPLETO
+const eliminarDelInventario = (id) => {
+  // 1. Quitarlo del catálogo general
+  platos.value = platos.value.filter(p => p.id !== id);
+  // 2. Si estaba en el carrito actual, limpiarlo de allí también
+  pedido.value = pedido.value.filter(p => p.id !== id);
+  lanzarAviso("🗑️ Producto eliminado del catálogo", "alert");
+};
 
+const agregarAlPedido = (plato) => {
+  if (plato.stock > 0) {
+    const existe = pedido.value.find(p => p.id === plato.id);
+    if (existe) { existe.cantidad++; } 
+    else { pedido.value.push({ ...plato, cantidad: 1 }); }
+    plato.stock--;
+    lanzarAviso("✨ Producto añadido");
+  }
+};
+
+const eliminarUno = (index, item) => {
+  const original = platos.value.find(p => p.id === item.id);
+  if (original) original.stock++;
+  if (item.cantidad > 1) { item.cantidad--; } 
+  else { pedido.value.splice(index, 1); }
+};
+
+const calcularTotal = () => {
+  let t = 0;
+  pedido.value.forEach(p => t += (p.precio * p.cantidad));
+  return t;
+};
+
+const obtenerCantidadTotal = () => {
+  let c = 0;
+  pedido.value.forEach(p => c += p.cantidad);
+  return c;
+};
+
+const lanzarAviso = (msg, tipo = "success") => {
+  notificacion.value = { visible: true, mensaje: msg, tipo };
+  setTimeout(() => notificacion.value.visible = false, 2000);
+};
+
+const procesarPago = () => {
+  cargando.value = true;
+  setTimeout(() => {
+    generarFactura();
+    pedido.value = [];
+    cargando.value = false;
+    carritoAbierto.value = false;
+  }, 1200);
+};
+
+// DISEÑO DEL PDF CORREGIDO (MÁXIMA SEPARACIÓN DE CAMPOS)
 function generarFactura() {
   const doc = new jsPDF();
   const fecha = new Date().toLocaleString();
-  
+  const totalPagado = `$${calcularTotal().toLocaleString()}`;
+
   doc.setFont("helvetica", "bold");
   doc.setFontSize(22);
   doc.text("RESTAURANTE GOURMET", 105, 20, { align: "center" });
-  
   doc.setLineWidth(1);
-  doc.line(20, 25, 190, 25); 
+  doc.line(15, 25, 195, 25);
 
   doc.setFontSize(10);
   doc.setFont("helvetica", "normal");
-  doc.text(`Fecha: ${fecha}`, 20, 35);
-  doc.text("Nit: 900.555.222-1", 20, 40);
+  doc.text(`Fecha: ${fecha}`, 15, 35);
+  doc.text("Nit: 900.555.222-1 | Régimen Simplificado", 15, 41);
 
   let y = 60;
   doc.setFillColor(0, 0, 0);
-  doc.rect(20, y - 5, 170, 8, 'F');
+  doc.rect(15, y - 6, 180, 10, 'F');
   doc.setTextColor(255, 255, 255);
-  doc.text("PRODUCTO", 25, y);
-  doc.text("CANT.", 110, y);
-  doc.text("TOTAL", 170, y);
+  doc.text("DETALLE DEL PRODUCTO", 20, y);
+  doc.text("CANT.", 120, y);
+  doc.text("SUBTOTAL", 185, y, { align: "right" });
 
   doc.setTextColor(0, 0, 0);
   y += 10;
-  pedido.value.forEach((p) => {
-    doc.text(p.nombre.substring(0, 30), 25, y);
-    doc.text(p.cantidad.toString(), 115, y, { align: "center" });
-    doc.text(`$${(p.precio * p.cantidad).toLocaleString()}`, 170, y);
+  pedido.value.forEach(p => {
+    doc.text(p.nombre, 20, y);
+    doc.text(p.cantidad.toString(), 123, y);
+    doc.text(`$${(p.precio * p.cantidad).toLocaleString()}`, 185, y, { align: "right" });
     y += 10;
   });
 
+  y += 10;
   doc.setLineWidth(0.5);
-  doc.line(130, y, 190, y);
+  doc.line(15, y, 195, y); // Línea completa para armonía visual
+  
+  y += 12;
   doc.setFontSize(14);
   doc.setFont("helvetica", "bold");
-  doc.text(`TOTAL: $${calcularTotal().toLocaleString()}`, 190, y + 10, { align: "right" });
+  
+  // SOLUCIÓN AL SOLAPAMIENTO: Anclados a extremos opuestos de la página
+  doc.text("TOTAL NETO A PAGAR:", 20, y); 
+  doc.text(totalPagado, 185, y, { align: "right" }); 
 
   doc.output('dataurlnewwindow');
 }
 </script>
 
 <style scoped>
+/* GENERAL */
+.app-container { font-family: 'Inter', sans-serif; background: #f8fafc; min-height: 100vh; padding: 20px; position: relative; }
+.main-header { text-align: center; margin-bottom: 25px; }
+.main-header h1 { font-size: 2.2rem; font-weight: 800; color: #0f172a; margin: 0; }
+.subtitle { color: #64748b; font-size: 0.9rem; }
 
-.app-container { font-family: 'Segoe UI', Roboto, sans-serif; background: #f0f2f5; padding: 30px; min-height: 100vh; }
-.main-header h1 { text-align: center; color: #1a1a1a; font-size: 2.5rem; margin-bottom: 40px; }
+/* TOOLBAR */
+.toolbar { display: flex; justify-content: space-between; align-items: center; background: white; padding: 12px 20px; border-radius: 12px; margin-bottom: 20px; border: 1px solid #e2e8f0; }
+.elegant-select { padding: 8px; border-radius: 8px; border: 1px solid #cbd5e1; font-weight: 600; }
+.btn-add-product { background: #000; color: white; border: none; padding: 10px 18px; border-radius: 8px; font-weight: 700; cursor: pointer; transition: 0.2s; }
+.btn-add-product:hover { background: #f59e0b; color: #000; }
 
-.layout { display: grid; grid-template-columns: 1fr 400px; gap: 30px; max-width: 1500px; margin: auto; }
+/* REJILLA Y CARDS OPTIMIZADAS (SIN ESPACIO MUERTO) */
+.platos-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 18px; }
+.card { background: white; border-radius: 16px; overflow: hidden; border: 1px solid #e2e8f0; transition: 0.3s; display: flex; flex-direction: column; height: 100%; }
+.card:hover { transform: translateY(-4px); box-shadow: 0 10px 20px rgba(0,0,0,0.06); }
 
-.platos-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 25px; }
-.card { background: white; border-radius: 20px; overflow: hidden; box-shadow: 0 10px 20px rgba(0,0,0,0.05); transition: 0.3s; }
-.card:hover { transform: translateY(-5px); box-shadow: 0 15px 30px rgba(0,0,0,0.1); }
-.card-image img { width: 100%; height: 200px; object-fit: cover; }
-.card-body { padding: 20px; }
+.card-image { height: 160px; position: relative; background: #f1f5f9; }
+.card-image img { width: 100%; height: 100%; object-fit: cover; }
 
-.btn-add-large { 
-  background: #1a1a1a; 
-  color: white; 
-  border: none; 
-  padding: 15px 25px; 
-  border-radius: 12px; 
-  font-weight: bold; 
-  font-size: 1rem; 
-  cursor: pointer; 
-  transition: 0.2s; 
-  width: 100%;
-  margin-top: 10px;
-}
-.btn-add-large:hover:not(:disabled) { background: #fbbf24; color: #1a1a1a; transform: scale(1.02); }
-.btn-add-large:disabled { background: #d1d5db; cursor: not-allowed; }
+.category-badge { position: absolute; bottom: 10px; right: 10px; background: rgba(0,0,0,0.75); color: #fbbf24; padding: 4px 8px; border-radius: 12px; font-size: 0.65rem; font-weight: 700; }
 
-.ticket { background: white; border-radius: 25px; padding: 30px; position: sticky; top: 20px; border: 1px solid #e5e7eb; }
-.btn-pdf-premium { 
-  width: 100%; 
-  padding: 20px; 
-  background: #000; 
-  color: #fff; 
-  border: none; 
-  border-radius: 15px; 
-  font-size: 1.1rem; 
-  font-weight: 800; 
-  cursor: pointer; 
-  letter-spacing: 1px;
-  transition: 0.3s;
-  box-shadow: 0 10px 20px rgba(0,0,0,0.2);
-}
-.btn-pdf-premium:hover:not(:disabled) { background: #333; transform: translateY(-3px); box-shadow: 0 15px 30px rgba(0,0,0,0.3); }
-.btn-pdf-premium:disabled { background: #9ca3af; box-shadow: none; cursor: not-allowed; }
+/* BOTÓN BORRAR DEL CATÁLOGO */
+.btn-delete-from-inventory { position: absolute; top: 10px; left: 10px; background: rgba(255, 255, 255, 0.9); border: none; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.15); transition: 0.2s; font-size: 0.85rem; }
+.btn-delete-from-inventory:hover { background: #ef4444; transform: scale(1.1); }
 
-.price { font-size: 1.5rem; font-weight: 900; color: #1a1a1a; }
-.stock-label { font-size: 0.85rem; font-weight: bold; color: #059669; }
-.total-price { font-size: 2rem; font-weight: 900; color: #1a1a1a; }
-.notificacion-exito { position: fixed; top: 30px; right: 30px; background: #10b981; color: white; padding: 20px 40px; border-radius: 15px; z-index: 999; font-weight: bold; }
+/* CUERPO COMPACTO */
+.card-body { padding: 12px; flex-grow: 1; display: flex; flex-direction: column; justify-content: space-between; gap: 6px; }
+.card-body h3 { margin: 0; font-size: 1.05rem; font-weight: 700; color: #0f172a; }
+.description { font-size: 0.8rem; color: #64748b; margin: 0; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 
-.elegant-select { padding: 12px; border-radius: 10px; border: 2px solid #e5e7eb; width: 300px; font-weight: bold; }
+.card-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 4px; padding-top: 8px; border-top: 1px solid #f1f5f9; }
+.price { font-size: 1.15rem; font-weight: 800; color: #0f172a; }
+.stock-label { font-size: 0.7rem; color: #059669; font-weight: 700; display: block; margin-top: 1px; }
+.agotado-text { color: #dc2626; }
+
+.btn-add-to-cart { background: #0f172a; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-size: 0.85rem; font-weight: 700; cursor: pointer; transition: 0.2s; }
+.btn-add-to-cart:hover { background: #f59e0b; color: black; }
+.btn-add-to-cart:disabled { background: #e2e8f0; color: #94a3b8; cursor: not-allowed; }
+
+/* MODALES Y CARRITO */
+.btn-floating-cart { position: fixed; bottom: 25px; right: 25px; background: #000; color: white; width: 55px; height: 55px; border-radius: 50%; border: none; cursor: pointer; font-size: 1.4rem; z-index: 100; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
+.cart-badge-count { position: absolute; top: -2px; right: -2px; background: #ef4444; color: white; font-size: 0.65rem; padding: 2px 6px; border-radius: 10px; font-weight: 800; }
+
+.modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.4); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+.modal-content { background: white; border-radius: 20px; padding: 20px; width: 90%; max-width: 460px; max-height: 85vh; overflow-y: auto; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); }
+.ticket-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #f1f5f9; padding-bottom: 8px; margin-bottom: 12px; }
+.btn-close-circle { background: #f1f5f9; border: none; width: 28px; height: 28px; border-radius: 50%; cursor: pointer; font-weight: bold; }
+
+/* FORMULARIOS */
+.nuevo-plato-form { display: flex; flex-direction: column; gap: 12px; }
+.form-group { display: flex; flex-direction: column; gap: 4px; }
+.form-group label { font-weight: 700; font-size: 0.85rem; color: #334155; }
+.form-group input, .form-group select { padding: 8px 12px; border-radius: 8px; border: 1px solid #e2e8f0; font-size: 0.9rem; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.btn-save-product { background: #000; color: white; border: none; padding: 12px; border-radius: 10px; font-weight: 800; cursor: pointer; margin-top: 5px; }
+
+/* TICKETS Y ELEMENTOS EN LISTA */
+.ticket-items { display: flex; flex-direction: column; gap: 8px; }
+.ticket-row { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed #e2e8f0; padding-bottom: 6px; }
+.item-name { font-weight: 700; font-size: 0.9rem; }
+.btn-remove-black { background: #000; color: white; border: none; width: 20px; height: 20px; border-radius: 50%; cursor: pointer; font-size: 0.65rem; }
+.total-row { display: flex; justify-content: space-between; align-items: center; margin: 15px 0; border-top: 2px solid #000; padding-top: 8px; }
+.total-price { font-size: 1.6rem; font-weight: 900; }
+.btn-finalize { width: 100%; background: #000; color: white; border: none; padding: 14px; border-radius: 12px; font-weight: 800; cursor: pointer; display: flex; justify-content: center; align-items: center; }
+
+/* TRANSICIONES Y NOTIFICACIONES */
+.spinner { width: 18px; height: 18px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.slide-toast-enter-active, .slide-toast-leave-active { transition: 0.25s; }
+.slide-toast-enter-from, .slide-toast-leave-to { transform: translateX(110%); opacity: 0; }
+.notificacion-toast { position: fixed; top: 15px; right: 15px; background: #0f172a; color: #fbbf24; padding: 12px 20px; border-radius: 10px; z-index: 2000; font-weight: 700; font-size: 0.9rem; }
+.notificacion-toast.alert { color: #f87171; }
+.fade-enter-active, .fade-leave-active { transition: 0.2s; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
 </style>
