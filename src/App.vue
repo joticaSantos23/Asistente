@@ -67,33 +67,50 @@
       <div v-if="carritoAbierto" class="modal-overlay" @click="carritoAbierto = false">
         <div class="modal-content ticket-modal" @click.stop>
           <div class="ticket-header">
-            <h2>🧾 Resumen de Pedido</h2>
+            <h2>🧾 Resumen del Pedido</h2>
             <button @click="carritoAbierto = false" class="btn-close-circle">✕</button>
           </div>
           
           <div v-if="pedido.length === 0" class="empty-cart">
-            <p>Carrito vacío</p>
+            <p>El carrito está vacío actualmente</p>
           </div>
 
-          <div v-else class="ticket-items">
-            <div v-for="(p, i) in pedido" :key="i" class="ticket-row">
-              <div class="item-info">
-                <span class="item-name">{{ p.nombre }}</span>
-                <small>${{ p.precio.toLocaleString() }} c/u</small>
-              </div>
-              <div class="item-actions">
-                <span class="qty-badge">x{{ p.cantidad }}</span>
-                <button @click="eliminarUno(i, p)" class="btn-remove-black">✕</button>
-              </div>
-            </div>
+          <div v-else class="ticket-items-container">
+            <table class="order-summary-table">
+              <thead>
+                <tr>
+                  <th>Ítem / Detalle</th>
+                  <th class="text-center">Cant.</th>
+                  <th class="text-right">Total</th>
+                  <th class="text-center"></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(p, i) in pedido" :key="i" class="ticket-row-item">
+                  <td>
+                    <div class="item-main-name">{{ p.nombre }}</div>
+                    <span class="item-unit-price">${{ p.precio.toLocaleString() }} c/u</span>
+                  </td>
+                  <td class="text-center">
+                    <span class="qty-badge-pill">{{ p.cantidad }}</span>
+                  </td>
+                  <td class="text-right font-bold text-slate">
+                    ${{ (p.precio * p.cantidad).toLocaleString() }}
+                  </td>
+                  <td class="text-center">
+                    <button @click="eliminarUno(i, p)" class="btn-remove-item" title="Remover uno">✕</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
 
           <div class="ticket-footer">
-            <div class="total-row">
-              <span>Total:</span>
-              <span class="total-price">${{ calcularTotal().toLocaleString() }}</span>
+            <div class="total-row-summary">
+              <span class="total-label">TOTAL NETO:</span>
+              <span class="total-price-value">${{ calcularTotal().toLocaleString() }} COP</span>
             </div>
-            <button class="btn-finalize" @click="procesarPago" :disabled="pedido.length === 0 || cargando">
+            <button class="btn-finalize-order" @click="procesarPago" :disabled="pedido.length === 0 || cargando">
               <span v-if="cargando" class="spinner"></span>
               <span v-else>💳 FINALIZAR Y ABRIR FACTURA</span>
             </button>
@@ -110,10 +127,10 @@
             <button @click="mostrarModalNuevo = false" class="btn-close-circle">✕</button>
           </div>
           
-          <form @submit.prevent="guardarNuevoPlato" class="nuevo-plato-form">
+          <form @submit.prevent="guardarNuevoPlato" class="nuevo-plato-form" novalidate>
             <div class="form-group">
               <label>Nombre del Plato:</label>
-              <input v-model="nuevoPlato.nombre" type="text" required placeholder="Ej: Pizza Hawaiana" />
+              <input v-model="nuevoPlato.nombre" type="text" placeholder="Ej: Pizza Hawaiana" />
             </div>
 
             <div class="form-row">
@@ -125,18 +142,18 @@
               </div>
               <div class="form-group">
                 <label>Stock Inicial:</label>
-                <input v-model.number="nuevoPlato.stock" type="number" min="1" required />
+                <input v-model.number="nuevoPlato.stock" type="number" />
               </div>
             </div>
 
             <div class="form-group">
               <label>Precio (COP):</label>
-              <input v-model.number="nuevoPlato.precio" type="number" min="0" required />
+              <input v-model.number="nuevoPlato.precio" type="number" />
             </div>
 
             <div class="form-group">
               <label>Imagen del Producto (.jpg):</label>
-              <input type="file" @change="manejarImagen" accept="image/jpeg, image/jpg" required />
+              <input type="file" @change="manejarImagen" accept="image/jpeg, image/jpg" />
             </div>
 
             <button type="submit" class="btn-save-product">💾 GUARDAR EN MENÚ</button>
@@ -181,7 +198,7 @@ const platos = ref([
   { id: 20, nombre: "Affogato Imperial", categoria: "Postres", precio: 18000, stock: 20, descripcion: "Gelatto de avellana con espresso y Amaretto.", ingredientes: "Gelatto, caffé, licor.", imagen: "https://shop.raynvillesuperstore.co.uk/cdn/shop/files/affogato-imperial-stout-bourbon-barrel-aged-107-330ml-bottle-849243_1024x1024_2x_1_1200x1200.webp?v=1698239639" },
   { id: 21, nombre: "Limonada de Coco y Menta", categoria: "Bebidas", precio: 15000, stock: 20, descripcion: "Mezcla refrescante de coco y limones.", ingredientes: "Leche de coco, limón.", imagen: "https://www.recetasnestle.com.co/sites/default/files/srh_recipes/422ebc949f85f0119fe5ca3beff55a17.jpg" },
   { id: 22, nombre: "Sangría de Frutos Rojos", categoria: "Bebidas", precio: 45000, stock: 20, descripcion: "Vino tinto con distintas frutas.", ingredientes: "Vino tinto, frutas.", imagen: "https://alimentossnob.com/wp-content/uploads/2020/10/sangriamedio-scaled.jpg" },
-  { id: 23, nombre: "Gin Tonic de Pepino y Rosas", categoria: "Bebidas", precio: 38000, stock: 20, descripcion: "Ginebra premium con pétalos orgánicos.", ingredientes: "Gin, tónica, pepino.", imagen: "https://cuk-it.com/wp-content/uploads/2024/12/gin-tonic-pepino.webp" },
+  { id: 23, font_bold: true, nombre: "Gin Tonic de Pepino y Rosas", categoria: "Bebidas", precio: 38000, stock: 20, descripcion: "Ginebra premium con pétalos orgánicos.", ingredientes: "Gin, tónica, pepino.", imagen: "https://cuk-it.com/wp-content/uploads/2024/12/gin-tonic-pepino.webp" },
   { id: 24, nombre: "Vino Tinto Reserva (Copa)", categoria: "Bebidas", precio: 32000, stock: 20, descripcion: "Selección de la casa Malbec o Cabernet.", ingredientes: "Uva reserva.", imagen: "https://lacaretalicores.com/cdn/shop/files/VINO_CASTILLO_MOLINA.webp?v=1764554804&width=600" },
   { id: 25, nombre: "Infusión de Frutos Rojos", categoria: "Bebidas", precio: 12000, stock: 20, descripcion: "Mezcla de bayas y flores de hibisco.", ingredientes: "Bayas, hibisco.", imagen: "https://www.pompadour.es/modules/ph_simpleblog/featured/141.jpg" },
   { id: 26, nombre: "Martini de Espresso", categoria: "Bebidas", precio: 35000, stock: 20, descripcion: "Vodka con café artesanal recién tostado.", ingredientes: "Vodka, café, licor.", imagen: "https://www.vinoskichak.com/cdn/shop/articles/ESPRESSO_MARTINI.jpg?v=1708916663" },
@@ -211,7 +228,36 @@ const manejarImagen = (e) => {
   }
 };
 
+// VALIDACIONES EXCLUSIVAS MEDIANTE TOASTS (APAGANDO COMPORTAMIENTO HTML POR DEFECTO)
 const guardarNuevoPlato = () => {
+  // 1. Validar campos obligatorios vacíos
+  if (!nuevoPlato.value.nombre.trim()) {
+    lanzarAviso("⚠️ El nombre del plato es obligatorio.", "alert");
+    return;
+  }
+  if (!nuevoPlato.value.imagen) {
+    lanzarAviso("⚠️ Debes seleccionar una imagen para el producto.", "alert");
+    return;
+  }
+
+  // 2. Validar que los números sean lógicos
+  if (nuevoPlato.value.precio <= 0) {
+    lanzarAviso("⚠️ El precio debe ser un número mayor a 0.", "alert");
+    return;
+  }
+  if (nuevoPlato.value.stock <= 0) {
+    lanzarAviso("⚠️ El stock inicial debe ser por lo menos 1.", "alert");
+    return;
+  }
+
+  // 3. Validar estrictamente la inyección de código HTML o Scripts (Reemplaza la alerta HTML nativa)
+  const regexHTML = /<[^>]*>/g;
+  if (regexHTML.test(nuevoPlato.value.nombre)) {
+    lanzarAviso("❌ ¡Inyección detectada! No se permite código HTML.", "alert");
+    return;
+  }
+
+  // Si todo es válido, procede a guardar normalmente
   const platoParaGuardar = { 
     ...nuevoPlato.value, 
     id: Date.now(), 
@@ -222,11 +268,8 @@ const guardarNuevoPlato = () => {
   lanzarAviso("✅ Producto añadido al catálogo");
 };
 
-// FUNCIÓN PARA BORRAR PRODUCTO POR COMPLETO
 const eliminarDelInventario = (id) => {
-  // 1. Quitarlo del catálogo general
   platos.value = platos.value.filter(p => p.id !== id);
-  // 2. Si estaba en el carrito actual, limpiarlo de allí también
   pedido.value = pedido.value.filter(p => p.id !== id);
   lanzarAviso("🗑️ Producto eliminado del catálogo", "alert");
 };
@@ -275,50 +318,56 @@ const procesarPago = () => {
   }, 1200);
 };
 
-// DISEÑO DEL PDF CORREGIDO (MÁXIMA SEPARACIÓN DE CAMPOS)
 function generarFactura() {
   const doc = new jsPDF();
   const fecha = new Date().toLocaleString();
-  const totalPagado = `$${calcularTotal().toLocaleString()}`;
+  const totalPagado = `$${calcularTotal().toLocaleString()} COP`;
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(22);
-  doc.text("RESTAURANTE GOURMET", 105, 20, { align: "center" });
-  doc.setLineWidth(1);
-  doc.line(15, 25, 195, 25);
+  doc.setFontSize(26); 
+  doc.text("RESTAURANTE GOURMET", 105, 26, { align: "center" });
+  
+  doc.setLineWidth(1.2);
+  doc.line(15, 28, 195, 28);
 
-  doc.setFontSize(10);
+  doc.setFontSize(12);
   doc.setFont("helvetica", "normal");
-  doc.text(`Fecha: ${fecha}`, 15, 35);
-  doc.text("Nit: 900.555.222-1 | Régimen Simplificado", 15, 41);
+  doc.text(`Fecha y Hora: ${fecha}`, 15, 38);
+  doc.text("Gracias por usar nuestro servicio.", 15, 45);
 
-  let y = 60;
-  doc.setFillColor(0, 0, 0);
-  doc.rect(15, y - 6, 180, 10, 'F');
+  let y = 65;
+  doc.setFillColor(15, 23, 42); 
+  doc.rect(15, y - 7, 180, 11, 'F');
+  
+  doc.setFontSize(11);
+  doc.setFont("helvetica", "bold");
   doc.setTextColor(255, 255, 255);
   doc.text("DETALLE DEL PRODUCTO", 20, y);
-  doc.text("CANT.", 120, y);
-  doc.text("SUBTOTAL", 185, y, { align: "right" });
+  doc.text("CANT.", 125, y);
+  doc.text("TOTAL ÍTEM", 185, y, { align: "right" });
 
   doc.setTextColor(0, 0, 0);
-  y += 10;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(12); 
+  
+  y += 11;
   pedido.value.forEach(p => {
     doc.text(p.nombre, 20, y);
-    doc.text(p.cantidad.toString(), 123, y);
+    doc.text(p.cantidad.toString(), 129, y);
     doc.text(`$${(p.precio * p.cantidad).toLocaleString()}`, 185, y, { align: "right" });
     y += 10;
   });
 
-  y += 10;
-  doc.setLineWidth(0.5);
-  doc.line(15, y, 195, y); // Línea completa para armonía visual
+  y += 5;
+  doc.setLineWidth(0.6);
+  doc.line(15, y, 195, y);
   
-  y += 12;
-  doc.setFontSize(14);
+  y += 14;
+  doc.setFontSize(16);
   doc.setFont("helvetica", "bold");
   
-  // SOLUCIÓN AL SOLAPAMIENTO: Anclados a extremos opuestos de la página
-  doc.text("TOTAL NETO A PAGAR:", 20, y); 
+  doc.text("TOTAL NETO PAGADO:", 20, y); 
+  doc.setTextColor(220, 38, 38); 
   doc.text(totalPagado, 185, y, { align: "right" }); 
 
   doc.output('dataurlnewwindow');
@@ -338,21 +387,18 @@ function generarFactura() {
 .btn-add-product { background: #000; color: white; border: none; padding: 10px 18px; border-radius: 8px; font-weight: 700; cursor: pointer; transition: 0.2s; }
 .btn-add-product:hover { background: #f59e0b; color: #000; }
 
-/* REJILLA Y CARDS OPTIMIZADAS (SIN ESPACIO MUERTO) */
+/* REJILLA Y CARDS */
 .platos-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 18px; }
 .card { background: white; border-radius: 16px; overflow: hidden; border: 1px solid #e2e8f0; transition: 0.3s; display: flex; flex-direction: column; height: 100%; }
 .card:hover { transform: translateY(-4px); box-shadow: 0 10px 20px rgba(0,0,0,0.06); }
 
 .card-image { height: 160px; position: relative; background: #f1f5f9; }
 .card-image img { width: 100%; height: 100%; object-fit: cover; }
-
 .category-badge { position: absolute; bottom: 10px; right: 10px; background: rgba(0,0,0,0.75); color: #fbbf24; padding: 4px 8px; border-radius: 12px; font-size: 0.65rem; font-weight: 700; }
 
-/* BOTÓN BORRAR DEL CATÁLOGO */
 .btn-delete-from-inventory { position: absolute; top: 10px; left: 10px; background: rgba(255, 255, 255, 0.9); border: none; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.15); transition: 0.2s; font-size: 0.85rem; }
 .btn-delete-from-inventory:hover { background: #ef4444; transform: scale(1.1); }
 
-/* CUERPO COMPACTO */
 .card-body { padding: 12px; flex-grow: 1; display: flex; flex-direction: column; justify-content: space-between; gap: 6px; }
 .card-body h3 { margin: 0; font-size: 1.05rem; font-weight: 700; color: #0f172a; }
 .description { font-size: 0.8rem; color: #64748b; margin: 0; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
@@ -366,7 +412,43 @@ function generarFactura() {
 .btn-add-to-cart:hover { background: #f59e0b; color: black; }
 .btn-add-to-cart:disabled { background: #e2e8f0; color: #94a3b8; cursor: not-allowed; }
 
-/* MODALES Y CARRITO */
+/* RESUMEN DEL PEDIDO (CARRITO) */
+.ticket-modal { max-width: 520px !important; }
+.ticket-items-container { max-height: 45vh; overflow-y: auto; margin-bottom: 15px; padding-right: 5px; }
+.order-summary-table { width: 100%; border-collapse: collapse; text-align: left; }
+.order-summary-table th { background-color: #f8fafc; color: #64748b; font-size: 0.75rem; text-transform: uppercase; font-weight: 700; padding: 10px; border-bottom: 2px solid #e2e8f0; }
+.ticket-row-item { border-bottom: 1px solid #f1f5f9; }
+.ticket-row-item:hover { background-color: #fafafa; }
+.ticket-row-item td { padding: 12px 10px; vertical-align: middle; }
+
+.item-main-name { font-weight: 700; font-size: 0.95rem; color: #1e293b; margin-bottom: 2px; }
+.item-unit-price { font-size: 0.75rem; color: #94a3b8; display: block; }
+
+.qty-badge-pill { background-color: #e2e8f0; color: #1e293b; font-weight: 800; font-size: 0.8rem; padding: 4px 10px; border-radius: 20px; }
+.btn-remove-item { background: #fee2e2; color: #ef4444; border: none; width: 24px; height: 24px; border-radius: 50%; cursor: pointer; font-size: 0.7rem; font-weight: bold; transition: 0.2s; display: inline-flex; align-items: center; justify-content: center; }
+.btn-remove-item:hover { background: #ef4444; color: white; transform: scale(1.1); }
+
+.total-row-summary { display: flex; justify-content: space-between; align-items: center; margin: 20px 0 15px 0; border-top: 2px dashed #cbd5e1; padding-top: 15px; }
+.total-label { font-size: 1rem; font-weight: 800; color: #64748b; }
+.total-price-value { font-size: 1.7rem; font-weight: 900; color: #0f172a; }
+.btn-finalize-order { width: 100%; background: #0f172a; color: white; border: none; padding: 14px; border-radius: 12px; font-weight: 800; cursor: pointer; display: flex; justify-content: center; align-items: center; transition: 0.2s; letter-spacing: 0.5px; }
+.btn-finalize-order:hover { background: #1e293b; box-shadow: 0 4px 12px rgba(15,23,42,0.15); }
+
+/* ESTILOS DE LA ALERTA DE SEGURIDAD */
+.html-alert-banner { 
+  background-color: #fff5f5; 
+  border: 1px solid #fed7d7; 
+  border-left: 5px solid #e53e3e; 
+  color: #c53030; 
+  padding: 14px 18px; 
+  border-radius: 8px; 
+  font-size: 0.85rem; 
+  line-height: 1.5; 
+  margin-bottom: 20px; 
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+/* MODALES Y FLOTANTES */
 .btn-floating-cart { position: fixed; bottom: 25px; right: 25px; background: #000; color: white; width: 55px; height: 55px; border-radius: 50%; border: none; cursor: pointer; font-size: 1.4rem; z-index: 100; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
 .cart-badge-count { position: absolute; top: -2px; right: -2px; background: #ef4444; color: white; font-size: 0.65rem; padding: 2px 6px; border-radius: 10px; font-weight: 800; }
 
@@ -374,6 +456,7 @@ function generarFactura() {
 .modal-content { background: white; border-radius: 20px; padding: 20px; width: 90%; max-width: 460px; max-height: 85vh; overflow-y: auto; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); }
 .ticket-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #f1f5f9; padding-bottom: 8px; margin-bottom: 12px; }
 .btn-close-circle { background: #f1f5f9; border: none; width: 28px; height: 28px; border-radius: 50%; cursor: pointer; font-weight: bold; }
+.empty-cart { text-align: center; padding: 30px; color: #94a3b8; font-size: 0.95rem; }
 
 /* FORMULARIOS */
 .nuevo-plato-form { display: flex; flex-direction: column; gap: 12px; }
@@ -383,16 +466,13 @@ function generarFactura() {
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .btn-save-product { background: #000; color: white; border: none; padding: 12px; border-radius: 10px; font-weight: 800; cursor: pointer; margin-top: 5px; }
 
-/* TICKETS Y ELEMENTOS EN LISTA */
-.ticket-items { display: flex; flex-direction: column; gap: 8px; }
-.ticket-row { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed #e2e8f0; padding-bottom: 6px; }
-.item-name { font-weight: 700; font-size: 0.9rem; }
-.btn-remove-black { background: #000; color: white; border: none; width: 20px; height: 20px; border-radius: 50%; cursor: pointer; font-size: 0.65rem; }
-.total-row { display: flex; justify-content: space-between; align-items: center; margin: 15px 0; border-top: 2px solid #000; padding-top: 8px; }
-.total-price { font-size: 1.6rem; font-weight: 900; }
-.btn-finalize { width: 100%; background: #000; color: white; border: none; padding: 14px; border-radius: 12px; font-weight: 800; cursor: pointer; display: flex; justify-content: center; align-items: center; }
+/* UTILIDADES */
+.text-right { text-align: right; }
+.text-center { text-align: center; }
+.font-bold { font-weight: 700; }
+.text-slate { color: #334155; }
 
-/* TRANSICIONES Y NOTIFICACIONES */
+/* TRANSICIONES */
 .spinner { width: 18px; height: 18px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .slide-toast-enter-active, .slide-toast-leave-active { transition: 0.25s; }
